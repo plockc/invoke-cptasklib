@@ -11,5 +11,8 @@ setup(name='invoke-cptasklib',
           'invoke',
           'requests',
       ],
+      entry_points={
+          'console_scripts': ['cptasks = invoke_cptasklib.main:program.run']
+      },
       zip_safe=False)
 
