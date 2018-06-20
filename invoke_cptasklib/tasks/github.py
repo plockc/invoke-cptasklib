@@ -6,7 +6,7 @@ import re
 from invoke import task
 import requests
 
-from file_util import is_dir
+from invoke_cptasklib.tasks.file_util import is_dir
 
 
 with open(os.path.join(os.environ['HOME'],
