@@ -1,6 +1,7 @@
 import inspect
 import os
 import re
+import time
 import yaml
 
 from invoke import Collection
@@ -101,3 +102,27 @@ def load_defaults(collection=None):
         collection.configure(defaults)
 
     return collection
+
+
+def wait_for_true(func, max_seconds=30, recheck_delay=10,
+                  raise_ex=True, *args, **kwargs):
+    def check():
+        try:
+            return func(*args, **kwargs)
+        except BaseException as e:
+            return e
+
+    if check() is True:
+        return True
+
+    timeout_time = time.time() + max_seconds
+    while time.time() < timeout_time:
+        time.sleep(recheck_delay)
+        status = check()
+        if status is True:
+            return True
+
+    if raise_ex:
+        raise Exception("Timeout waiting for condition: {}".format(status))
+
+    return status
