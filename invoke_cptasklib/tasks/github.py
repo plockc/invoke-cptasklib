@@ -65,7 +65,7 @@ def get_pr_status(c, pr_id, repo, owner, api="https://api.github.com"):
     status = _get_pr_status(pr_id, repo, owner, api)
     print("{}/{} PR #{} status: {}".format(owner, repo, pr_id, status[0]))
     for s in status[1]:
-        print("{}: {}".format(s[0], s[2]))
+        print("{}: {}  {}".format(s[0], s[1], s[2]))
 
 
 
@@ -80,6 +80,9 @@ def add_pr_comment(
 
 
 def _get_pr_status(pr_id, repo, owner, api="https://api.github.com"):
+    """
+    :returns: (state, context, time of state, urls for state)
+    """
     sha = pr_json(pr_id, repo, owner, api)['head']['sha']
     url_fmt = "/repos/{owner}/{repo}/commits/{sha}/statuses"
     url = url_fmt.format(owner=owner, repo=repo, sha=sha)
@@ -101,7 +104,7 @@ def _get_pr_status(pr_id, repo, owner, api="https://api.github.com"):
              s["target_url"]) for s in last_statuses if s['state'] == state]
         if not statuses:
             return None
-        return (state, statuses[0][1], statuses)
+        return (state, statuses[0][0], statuses[0][1], statuses)
 
     failures = filter_statuses('failure')
     pendings = filter_statuses('pending')
