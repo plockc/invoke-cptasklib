@@ -6,7 +6,7 @@ import re
 from invoke import task
 import requests
 
-from file_util import is_dir
+from invoke_cptasklib.tasks.file_util import is_dir
 
 
 with open(os.path.join(os.environ['HOME'],
@@ -24,15 +24,15 @@ def get_remotes(c, repo):
 
 
 @task
-def ensure_remote(c, repo, user=None, server="github.com"):
-    if user is None:
-        user = os.environ['USER']
+def ensure_remote(c, repo, owner=None, server="github.com"):
+    if owner is None:
+        owner = os.environ['USER']
     with c.cd(repo):
-        if user not in _get_remotes(c, repo):
-            print("Adding remote for {}".format(user))
-            remote_url = "git@{}:{}/{}.git".format(server, user, repo)
-            c.run("git remote add {} {}".format(user, remote_url), hide="out")
-        c.run("git fetch {}".format(user), hide="out")
+        if owner not in _get_remotes(c, repo):
+            print("Adding remote for {}".format(owner))
+            remote_url = "git@{}:{}/{}.git".format(server, owner, repo)
+            c.run("git remote add {} {}".format(owner, remote_url), hide="out")
+        c.run("git fetch {}".format(owner), hide="out")
 
 
 
@@ -57,7 +57,7 @@ def pull(c, repo):
 def pr_json(pr, repo, owner, api="https://api.github.com"):
     pr_url_fmt = "/repos/{owner}/{repo}/pulls/{number}"
     pr_url = pr_url_fmt.format(owner=owner, repo=repo, number=pr)
-    return get_json(auth_tokens[api], api+pr_url)
+    return get_json(api, api+pr_url)
 
 
 @task
@@ -65,7 +65,7 @@ def get_pr_status(c, pr_id, repo, owner, api="https://api.github.com"):
     status = _get_pr_status(pr_id, repo, owner, api)
     print("{}/{} PR #{} status: {}".format(owner, repo, pr_id, status[0]))
     for s in status[1]:
-        print("{}: {}".format(s[0], s[2]))
+        print("{}: {}  {}".format(s[0], s[1], s[2]))
 
 
 
@@ -76,14 +76,17 @@ def add_pr_comment(
     url = url_fmt.format(owner=owner, repo=repo, pr=pr_id)
     post = dict(body=comment)
     print("Adding comment to {}".format(pr_id))
-    post_json(auth_tokens[api], api + url, post)
+    post_json(api, api + url, post)
 
 
 def _get_pr_status(pr_id, repo, owner, api="https://api.github.com"):
+    """
+    :returns: (state, context, time of state, urls for state)
+    """
     sha = pr_json(pr_id, repo, owner, api)['head']['sha']
     url_fmt = "/repos/{owner}/{repo}/commits/{sha}/statuses"
     url = url_fmt.format(owner=owner, repo=repo, sha=sha)
-    status_json = get_json(auth_tokens[api], api + url)
+    status_json = get_json(api, api + url)
 
     if not status_json:
         return None
@@ -101,7 +104,7 @@ def _get_pr_status(pr_id, repo, owner, api="https://api.github.com"):
              s["target_url"]) for s in last_statuses if s['state'] == state]
         if not statuses:
             return None
-        return (state, statuses[0][1], statuses)
+        return (state, statuses[0][0], statuses[0][1], statuses)
 
     failures = filter_statuses('failure')
     pendings = filter_statuses('pending')
@@ -120,7 +123,7 @@ def ensure_branch(c, branch, repo, remote=None, fork=None, base=None):
     ensure_cloned_repo(c, repo)
 
     if remote is not None:
-        ensure_remote(c, repo, user=remote)
+        ensure_remote(c, repo, owner=remote)
 
     with c.cd(repo):
         branches = c.run("git branch -vv", hide="out").stdout.splitlines()
@@ -185,9 +188,9 @@ def create_pr(c, title, branch, base_branch, repo, owner, body="",
         fork = owner
     post = dict(title=title, head=fork+':'+branch, base=base_branch, body=body)
     print("Creating PR")
-    pr_data = post_json(auth_tokens[api], api + url, post)
+    pr_data = post_json(api, api + url, post)
     print(pr_data['html_url'])
-    return pr_data['id']
+    return pr_data['number']
 
 
 def _get_shas(repo, branch="master", owner=None, api="https://api.github.com"):
@@ -197,7 +200,7 @@ def _get_shas(repo, branch="master", owner=None, api="https://api.github.com"):
            "&per_page=100").format(
             api=api, owner=owner, repo=repo, branch=branch)
 
-    commits_json = get_json(auth_tokens[api], url)
+    commits_json = get_json(api, url)
     return [c['sha'][:7] for c in commits_json]
 
 
@@ -207,16 +210,16 @@ def get_shas(c, repo, branch="master", owner=None,
     print(get_shas(repo, branch, owner, api))
 
 
-def post_json(auth_token, url, data):
-    headers = {'Authorization': "token " + auth_token}
+def post_json(api, url, data):
+    headers = {'Authorization': "token " + auth_tokens[api]}
     resp = requests.post(url, headers=headers, data=json.dumps(data))
     resp_json = resp.json()
     resp.close()
     return resp_json
 
 
-def get_json(auth_token, url):
-    headers = {'Authorization': "token " + auth_token}
+def get_json(api, url):
+    headers = {'Authorization': "token " + auth_tokens[api]}
     resp = requests.get(url, headers=headers)
     resp_json = resp.json()
     resp.close()
