@@ -24,15 +24,15 @@ def get_remotes(c, repo):
 
 
 @task
-def ensure_remote(c, repo, user=None, server="github.com"):
-    if user is None:
-        user = os.environ['USER']
+def ensure_remote(c, repo, owner=None, server="github.com"):
+    if owner is None:
+        owner = os.environ['USER']
     with c.cd(repo):
-        if user not in _get_remotes(c, repo):
-            print("Adding remote for {}".format(user))
-            remote_url = "git@{}:{}/{}.git".format(server, user, repo)
-            c.run("git remote add {} {}".format(user, remote_url), hide="out")
-        c.run("git fetch {}".format(user), hide="out")
+        if owner not in _get_remotes(c, repo):
+            print("Adding remote for {}".format(owner))
+            remote_url = "git@{}:{}/{}.git".format(server, owner, repo)
+            c.run("git remote add {} {}".format(owner, remote_url), hide="out")
+        c.run("git fetch {}".format(owner), hide="out")
 
 
 
@@ -120,7 +120,7 @@ def ensure_branch(c, branch, repo, remote=None, fork=None, base=None):
     ensure_cloned_repo(c, repo)
 
     if remote is not None:
-        ensure_remote(c, repo, user=remote)
+        ensure_remote(c, repo, owner=remote)
 
     with c.cd(repo):
         branches = c.run("git branch -vv", hide="out").stdout.splitlines()
