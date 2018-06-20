@@ -57,7 +57,7 @@ def pull(c, repo):
 def pr_json(pr, repo, owner, api="https://api.github.com"):
     pr_url_fmt = "/repos/{owner}/{repo}/pulls/{number}"
     pr_url = pr_url_fmt.format(owner=owner, repo=repo, number=pr)
-    return get_json(auth_tokens[api], api+pr_url)
+    return get_json(api, api+pr_url)
 
 
 @task
@@ -76,14 +76,14 @@ def add_pr_comment(
     url = url_fmt.format(owner=owner, repo=repo, pr=pr_id)
     post = dict(body=comment)
     print("Adding comment to {}".format(pr_id))
-    post_json(auth_tokens[api], api + url, post)
+    post_json(api, api + url, post)
 
 
 def _get_pr_status(pr_id, repo, owner, api="https://api.github.com"):
     sha = pr_json(pr_id, repo, owner, api)['head']['sha']
     url_fmt = "/repos/{owner}/{repo}/commits/{sha}/statuses"
     url = url_fmt.format(owner=owner, repo=repo, sha=sha)
-    status_json = get_json(auth_tokens[api], api + url)
+    status_json = get_json(api, api + url)
 
     if not status_json:
         return None
@@ -185,7 +185,7 @@ def create_pr(c, title, branch, base_branch, repo, owner, body="",
         fork = owner
     post = dict(title=title, head=fork+':'+branch, base=base_branch, body=body)
     print("Creating PR")
-    pr_data = post_json(auth_tokens[api], api + url, post)
+    pr_data = post_json(api, api + url, post)
     print(pr_data['html_url'])
     return pr_data['id']
 
@@ -197,7 +197,7 @@ def _get_shas(repo, branch="master", owner=None, api="https://api.github.com"):
            "&per_page=100").format(
             api=api, owner=owner, repo=repo, branch=branch)
 
-    commits_json = get_json(auth_tokens[api], url)
+    commits_json = get_json(api, url)
     return [c['sha'][:7] for c in commits_json]
 
 
@@ -207,16 +207,16 @@ def get_shas(c, repo, branch="master", owner=None,
     print(get_shas(repo, branch, owner, api))
 
 
-def post_json(auth_token, url, data):
-    headers = {'Authorization': "token " + auth_token}
+def post_json(api, url, data):
+    headers = {'Authorization': "token " + auth_tokens[api]}
     resp = requests.post(url, headers=headers, data=json.dumps(data))
     resp_json = resp.json()
     resp.close()
     return resp_json
 
 
-def get_json(auth_token, url):
-    headers = {'Authorization': "token " + auth_token}
+def get_json(api, url):
+    headers = {'Authorization': "token " + auth_tokens[api]}
     resp = requests.get(url, headers=headers)
     resp_json = resp.json()
     resp.close()
