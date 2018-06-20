@@ -190,7 +190,7 @@ def create_pr(c, title, branch, base_branch, repo, owner, body="",
     print("Creating PR")
     pr_data = post_json(api, api + url, post)
     print(pr_data['html_url'])
-    return pr_data['id']
+    return pr_data['number']
 
 
 def _get_shas(repo, branch="master", owner=None, api="https://api.github.com"):
