@@ -1,4 +1,5 @@
 from setuptools import setup
+from setuptools import find_packages
 
 setup(name='invoke-cptasklib',
       version=.1,
@@ -6,9 +7,9 @@ setup(name='invoke-cptasklib',
       url='https://github.com/plockc/invoke-cptasklib',
       author='Chris Plock',
       license='Unlicense',
-      packages=['invoke_cptasklib'],
+      packages=find_packages(),
       install_requires=[
-          'invoke',
+          'invoke>=1.0.0',
           'requests',
       ],
       entry_points={
