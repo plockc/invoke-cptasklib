@@ -83,9 +83,9 @@ def load_defaults(collection=None):
     caller_path = caller_frame_record[1]
     caller_frame = caller_frame_record[0]
 
+    calling_module = inspect.getmodule(caller_frame)
     if collection is None:
         collection = Collection()
-        calling_module = inspect.getmodule(caller_frame)
         module_tasks = [
             t for _, t in inspect.getmembers(calling_module)
             if isinstance(t, Task)]
@@ -99,9 +99,39 @@ def load_defaults(collection=None):
         with open(default_path) as f:
             print("loaded defaults from {}".format(default_path))
             defaults = yaml.safe_load(f)
-        collection.configure(defaults)
+            module_short_name = calling_module.__name__.split('.')[-1]
+            collection.configure({module_short_name: defaults})
 
     return collection
+
+
+# TODO: split up the load defaults above so can load the passed in module's
+#  defaults before overriding
+def add_tasks(ns, module, *tasks):
+    calling_module = inspect.getmodule(inspect.stack()[1][0])
+    calling_module_short_name = calling_module.__name__.split('.')[-1]
+
+    module_name = module.__name__.split('.')[-1]
+
+    # create new collection and add the requested task
+    # this allows us to create a configuration specific to this collection
+    if tasks:
+        for task in tasks:
+            collection = Collection(module_name)
+            task = getattr(module, task)
+            collection.add_task(task)
+    else:
+        collection = Collection.from_module(module)
+
+    ns.add_collection(collection)
+
+    if not calling_module_short_name in ns.configuration():
+        return
+    calling_module_configuration = ns.configuration()[calling_module_short_name]
+    if not module_name in calling_module_configuration:
+        return
+    module_configuration = calling_module_configuration[module_name]
+    collection.configure({module_name: module_configuration})
 
 
 def wait_for_true(func, max_seconds=30, recheck_delay=10,

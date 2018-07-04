@@ -1,4 +1,5 @@
 import os
+from os.path import ismount
 
 from invoke import task
 from invoke.exceptions import Exit
@@ -9,7 +10,7 @@ def dir(c, path, owner=None, owner_group=None, user=None,
         group=None, other=None, sudo=False):
     sudo_cmd = "sudo " if sudo is True else ""
     if not is_dir(c, path):
-        c.run(sudo_cmd + "mkdir " + path)
+        c.run(sudo_cmd + "mkdir -p " + path)
     set_owner(c, path, owner, owner_group, sudo)
     ensure_mode(c, path, user=user, group=group, other=other, sudo=sudo)
 
@@ -39,7 +40,7 @@ def set_owner(c, path, owner=None, group=None, sudo=False):
 
 @task
 def ensure_mode(c, path, mode=None, user=None, group=None, other=None, sudo=False):
-    if not file_util.exists(c, path):
+    if not exists(c, path):
         raise Exception("Cannot set mode for path that does not exist: {}".format(
             path))
 
@@ -91,3 +92,30 @@ def is_dir(c, *paths):
 def exists(c, *paths):
     full_path = os.path.join(paths[0], *paths[1:])
     return c.run("test -e {}".format(full_path), warn=True).ok
+
+@task
+def absent_mount(c, target_dir):
+    if not exists(c, target_dir):
+        return
+    if is_file(c, target_dir):
+        raise Exception("Expected directory instead of file: {}".format(
+            target_dir))
+    if ismount(target_dir):
+        c.run("sudo umount {}".format(target_dir))
+        return
+
+@task
+def ensure_mount(c, device, target_dir, dev_type=None):
+    if ismount(target_dir):
+        mounts = c.run("cat /proc/self/mounts").stdout.splitlines()
+        mount_info = next((line for line in mounts if line.split()[1] == target_dir), None)
+        if mount_info is None:
+            raise Exception("Odd, {} is a mount but not found in /proc/self/mounts".format(target_dir))
+        if mount_info.split()[0] != device:
+            raise Exception("Wrong device ({}) mounted at {}".format(
+                device, target_dir))
+        return
+    dir(c, target_dir, sudo=True)
+    type_arg = "" if dev_type is None else "-t {}".format(dev_type)
+    print("Mounting {} at {}".format(device, target_dir))
+    c.run("sudo mount " + type_arg + "{} {}".format(device, target_dir))

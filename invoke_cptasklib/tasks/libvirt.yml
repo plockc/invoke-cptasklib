@@ -1,0 +1,32 @@
+---
+vm_defaults:
+    kernel_path: /var/lib/libvirt/images/bionic-server-cloudimg-amd64-vmlinuz-generic
+    initd_path: /var/lib/libvirt/images/bionic-server-cloudimg-amd64-initrd-generic
+    cloud_init_floppy_path: /var/lib/libvirt/images/seed.img
+    # kernel_args: "root=/dev/vda"
+    vcpus: 1
+    ram_mb: 2048
+    cpu_model: Broadwell-noTSX
+    #cpu_model: Skylake-Client
+
+packages:
+    install:
+        - "qemu-kvm"
+        - "libvirt-bin"
+        - "virtinst"
+
+cloud_init_disks_tmpl: >-
+    --disk={disk} --disk={floppy_path},device=floppy
+
+kernel_recovery_mode_args: "single console=ttyS0,115200"
+qcow_images_parent_dir: /var/lib/libvirt/images
+distro_downloads_dir: /var/lib/libvirt/distro_downloads
+default_distro_filename: bionic-server-cloudimg-amd64.squashfs
+fs_vm_virt_install_tmpl: >-
+    virt-install --debug --name={name} --ram={ram_mb} --vcpus={vcpus}
+    --cpu={cpu_model} --filesystem {root},/dev/root,mode=passthrough
+    --boot kernel=/boot/vmlinuz-4.15.0-22-generic,initrd=/home/plockc/proj/test-cluster/initrd,kernel_args="ro root=/dev/root rootfstype=9p rootflags=trans=virtio,version=9p2000.u" --os-variant ubuntu17.10
+vm_virt_install_tmpl: >-
+    virt-install --debug --name={name} --ram={ram_mb} --vcpus={vcpus}
+    --cpu={cpu_model} --os-variant ubuntu17.10 {disks} --network=user --import
+    --boot kernel={kernel_path},initrd={initd_path},kernel_args="{kernel_args}"
