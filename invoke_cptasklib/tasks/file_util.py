@@ -1,4 +1,3 @@
-import os
 from os.path import ismount
 
 from invoke import task
@@ -79,19 +78,16 @@ def ensure_mode(c, path, mode=None, user=None, group=None, other=None, sudo=Fals
     c.run(sudo_cmd + cmd + ",".join(modes) + " " + path)
 
 
-def is_file(c, *paths):
-    full_path = os.path.join(paths[0], *paths[1:])
-    return c.run("test -f {}".format(full_path), warn=True).ok
+def is_file(c, path):
+    return c.run("test -f {}".format(path), warn=True).ok
 
 
-def is_dir(c, *paths):
-    full_path = os.path.join(paths[0], *paths[1:])
-    return c.run("test -d {}".format(full_path), warn=True).ok
+def is_dir(c, path):
+    return c.run("test -d {}".format(path), warn=True).ok
 
 
-def exists(c, *paths):
-    full_path = os.path.join(paths[0], *paths[1:])
-    return c.run("test -e {}".format(full_path), warn=True).ok
+def exists(c, path):
+    return c.run("test -e {}".format(path), warn=True).ok
 
 @task
 def absent_mount(c, target_dir):
@@ -101,6 +97,7 @@ def absent_mount(c, target_dir):
         raise Exception("Expected directory instead of file: {}".format(
             target_dir))
     if ismount(target_dir):
+        print("Unmounting {}".format(target_dir))
         c.run("sudo umount {}".format(target_dir))
         return
 
