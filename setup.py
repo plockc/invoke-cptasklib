@@ -9,7 +9,7 @@ setup(name='invoke-cptasklib',
       license='Unlicense',
       packages=find_packages(),
       install_requires=[
-          'invoke>=1.0.0',
+          'invoke',
           'requests',
       ],
       entry_points={
