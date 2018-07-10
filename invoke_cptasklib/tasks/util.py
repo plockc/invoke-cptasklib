@@ -1,4 +1,6 @@
+import functools
 import inspect
+from itertools import dropwhile
 import os
 import re
 import time
@@ -69,6 +71,79 @@ def remove_present(c, cmd_fmt, noun, items_func, remove_items,
         raise Exception("Failed to remove some {}: {}".format(
             noun, render_func(present)))
 
+def task_vars(task):
+    # this will be to tell variable_lookup which vars to look at
+    module_name = task.__module__.split('.')[-1]
+    # create the function to expose to Task that does all the magic
+    # including calling the final function with an extra task_vars
+    # parameters that can handle attribute or dict lookups, and
+    # those can be called as a function if key value pairs need
+    # to be set for name value pairs
+    def call_task(c, *args, **kwargs):
+        class task_vars:
+            # handle dict lookups
+            def __getitem__(self, i):
+                #TODO: replace with value, and set __call__ for kwarg
+                return functools.partial(variable_lookup, c, i,
+                                         module_name)
+            # handle attribute lookups
+            def __getattribute__(self, i):
+                #TODO: replace with value, and set __call__ for kwarg
+                return functools.partial(variable_lookup, c, i,
+                                         module_name)
+        task(c, *args, task_vars=task_vars(), **kwargs)
+    # fake out invoke Task with name, module, and signature
+    call_task.__name__  = task.__name__
+    call_task.__module__  = task.__module__
+    # inspect.signature creates a Signature object
+    # Signature.parameters is a dict of name to Parameter objects
+    # filter out the 'task_vars' parameter that we injected and
+    # create a new Signature with that to expose to Task
+    # the __signature__ attribute tells inspect what to report the params are
+    call_task.__signature__ = inspect.signature(task).replace(
+        parameters=[p[1] for p in inspect.signature(task).parameters.items()
+                    if p[0] != 'task_vars'])
+    return call_task
+
+# brute force lookups, could build dependency graphs to speed lookups
+def variable_lookup(c, name, module_short_name, **kwargs):
+    vars_dict = dict(c.config[module_short_name])
+
+    # if any kwarg overrides a value in a template dict, then
+    # that dict plus all the remaining have to be re-evaluated
+    # for this lookup
+    dicts_to_eval = list(
+        dropwhile(lambda d: not (set(d) & set(kwargs)),
+                  c.config.get('cptasks_module_defaults', [])))
+
+    for dict_to_eval in dicts_to_eval:
+        # when a key appears in dict_to_eval that is in kwargs,
+        # we include the kwarg override and defer the over kwargs
+        # until later as they may rely on vars that have not been
+        # defined yet
+        overrides = set(kwargs) & set(dict_to_eval)
+
+        # use the kwargs rendered values instead of dict_to_eval's
+        # dict_to_eval needs to be a copy so make a new one
+        dict_to_eval = {k: v for k, v in dict_to_eval.items()
+                        if k not in overrides}
+        for k in overrides:
+            vars_dict[k] = format_strings(vars_dict, kwargs[k])
+
+        vars_dict.update(format_strings(vars_dict, dict_to_eval))
+    # re-apply here in case the requested var was overriden in kwargs
+    vars_dict.update(kwargs)
+    return format_strings(vars_dict, vars_dict[name])
+
+def format_strings(var_dict, to_format):
+    if isinstance(to_format, str):
+        return to_format.format(**var_dict)
+    if isinstance(to_format, dict):
+        return {k: format_strings(var_dict, v)
+                   for k, v in to_format.items()}
+    if isinstance(to_format, list):
+        return [format_strings(var_dict, elem) for elem in to_format]
+    return to_format
 
 def load_defaults(collection=None):
     """Update collection configuration with defaults from a .yml file
@@ -98,10 +173,16 @@ def load_defaults(collection=None):
     if os.path.isfile(default_path):
         with open(default_path) as f:
             print("loaded defaults from {}".format(default_path))
-            defaults = yaml.safe_load(f)
+            # TODO: load up all them dicts
+            module_vars = {}
+            cptasks_module_defaults = list(yaml.safe_load_all(f))
+            for var_dict in cptasks_module_defaults:
+                formatted_vars = format_strings(module_vars, var_dict)
+                module_vars.update(formatted_vars)
             module_short_name = calling_module.__name__.split('.')[-1]
-            collection.configure({module_short_name: defaults})
-
+            collection.configure({
+                module_short_name: module_vars,
+                'cptasks_module_defaults': cptasks_module_defaults})
     return collection
 
 
