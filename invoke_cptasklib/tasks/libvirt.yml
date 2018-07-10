@@ -1,32 +1,97 @@
 ---
-vm_defaults:
-    kernel_path: /var/lib/libvirt/images/bionic-server-cloudimg-amd64-vmlinuz-generic
-    initd_path: /var/lib/libvirt/images/bionic-server-cloudimg-amd64-initrd-generic
-    cloud_init_floppy_path: /var/lib/libvirt/images/seed.img
-    # kernel_args: "root=/dev/vda"
-    vcpus: 1
-    ram_mb: 2048
-    cpu_model: Broadwell-noTSX
-    #cpu_model: Skylake-Client
+instance_name: UNKNOWN
+disk_name: UNKNOWN
+
+vcpus: 1
+ram_mb: 2048
+cpu_model: Broadwell-noTSX
+root_disk_size_g: 50
+
+distro_name: bionic-server-cloudimg-amd64
+kernel_single_user_args: "single console=ttyS0,115200"
+no_graphics_arg: "--graphics none"
+
+cloud_init_file_name: cloud-init.img
 
 packages:
     install:
-        - "qemu-kvm"
-        - "libvirt-bin"
-        - "virtinst"
+        - qemu-kvm
+        - libvirt-bin
+        - virtinst
 
-cloud_init_disks_tmpl: >-
-    --disk={disk} --disk={floppy_path},device=floppy
 
-kernel_recovery_mode_args: "single console=ttyS0,115200"
-qcow_images_parent_dir: /var/lib/libvirt/images
-distro_downloads_dir: /var/lib/libvirt/distro_downloads
-default_distro_filename: bionic-server-cloudimg-amd64.squashfs
-fs_vm_virt_install_tmpl: >-
-    virt-install --debug --name={name} --ram={ram_mb} --vcpus={vcpus}
-    --cpu={cpu_model} --filesystem {root},/dev/root,mode=passthrough
-    --boot kernel=/boot/vmlinuz-4.15.0-22-generic,initrd=/home/plockc/proj/test-cluster/initrd,kernel_args="ro root=/dev/root rootfstype=9p rootflags=trans=virtio,version=9p2000.u" --os-variant ubuntu17.10
-vm_virt_install_tmpl: >-
-    virt-install --debug --name={name} --ram={ram_mb} --vcpus={vcpus}
-    --cpu={cpu_model} --os-variant ubuntu17.10 {disks} --network=user --import
-    --boot kernel={kernel_path},initrd={initd_path},kernel_args="{kernel_args}"
+assets_base_dir: /var/lib/libvirt
+---
+images_dir: "{assets_base_dir}/images"
+
+distro_download_filename: "{distro_name}.squashfs"
+distro_disk_filename: "{distro_name}.qcow2"
+
+kernel_args: ""
+kernel_name: "{distro_name}-vmlinuz-generic"
+initrd_name: "{distro_name}-initrd-generic"
+
+---
+instance_disk_dir: "{images_dir}/{instance_name}"
+
+distro_downloads_dir: "{images_dir}/distro_downloads"
+distro_disk_dir: "{images_dir}/distro_bases"
+
+---
+root_disk: "{instance_disk_dir}/disk-root.qcow2"
+other_disk: "{instance_disk_dir}/disk-{disk_name}.qcow2"
+cloud_init_floppy_path: "{instance_disk_dir}/{cloud_init_file_name}"
+
+distro_disk_path: "{distro_disk_dir}/{distro_disk_filename}"
+distro_download_path: "{distro_downloads_dir}/{distro_download_filename}"
+distro_mount_dir: "{distro_disk_dir}/{distro_name}_root_mnt"
+distro_raw_image_path: "{distro_disk_dir}/{distro_name}.img"
+
+kernel_path: "{assets_base_dir}/boot/{kernel_name}"
+initrd_path: "{assets_base_dir}/boot/{initrd_name}"
+kernel_args: "root=/dev/vda"
+#cpu_model: Skylake-Client
+
+---
+cloud_init_disk_arg: "--disk={cloud_init_floppy_path},device=floppy"
+root_disk_arg: "--disk={root_disk}"
+---
+other_disks: ""
+
+---
+vm:
+    kernel_path: "{kernel_path}"
+    initd_path: "{initrd_path}"
+    vcpus: "{vcpus}"
+    ram_mb: "{ram_mb}"
+    cpu_model: "{cpu_model}"
+    kernel_args: "{kernel_args}"
+    name: "{instance_name}"
+    root_disk: "{root_disk_arg}"
+    cloud_init_disk: "{cloud_init_disk_arg}"
+    other_disks: "{other_disks}"
+    graphics: ""
+---
+
+#fs_vm_virt_install_tmpl: >-
+#  virt-install --debug --name={vm.name} --ram={vm.ram_mb} --vcpus={vm.vcpus}
+#  --cpu={vm.cpu_model} --filesystem {root},/dev/root,mode=passthrough
+#  --boot kernel=/boot/vmlinuz-4.15.0-22-generic,initrd=/home/plockc/proj/test-cluster/initrd,kernel_args="ro root=/dev/root rootfstype=9p rootflags=trans=virtio,version=9p2000.u" --os-variant ubuntu17.10
+
+vm_virt_install_cmd: >-
+    virt-install --debug --name={vm[name]} --ram={vm[ram_mb]}
+    --vcpus={vm[vcpus]} --cpu={vm[cpu_model]} --os-variant ubuntu17.10
+    {vm[root_disk]} {vm[cloud_init_disk]} {vm[other_disks]} --network=user --import
+    --boot kernel={vm[kernel_path]},initrd={vm[initd_path]},kernel_args="{vm[kernel_args]}"
+    {vm[graphics]}
+
+user_data: |
+    #cloud-config
+    password: passw0rd
+    chpasswd:
+        expire: False
+    ssh_pwauth: True
+
+meta_data: |
+    instance-id: iid-local01
+    local-hostname: {instance_name}
