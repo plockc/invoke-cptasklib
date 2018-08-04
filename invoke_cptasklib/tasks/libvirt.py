@@ -46,6 +46,7 @@ def cat(c):
 @task_vars
 def meh(c, task_vars, name='one'):
     print("Got {}".format(task_vars.vm(instance_name=name)))
+    print("Got {}".format(task_vars.vm(vm="{root_disk_arg}")))
 
 @task
 def ensure_cloud_init_image(c, instance_name):
