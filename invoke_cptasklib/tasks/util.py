@@ -77,24 +77,24 @@ def task_vars(task):
 
     It is required to come after the @task decoration
 
-    This will call the wrapped function with an additional 'task_vars'
+    This will call the wrapped function with an additional 'tvars'
     parameter, and proxy the first parameter 'c' which is Invoke's
     Context, plus all the args and kwargs.
 
-    The task_vars can be used like task_vars['foo'] or task_vars.foo
+    The tvars can be used like tvars['foo'] or tvars.foo
 
     It will use loaded config vars based on the module name, and template
     them using python str format
 
     The returned function (which @task sees) will pretend to have a
-    signature that does not include the task_vars parameter, so that
-    the caller sees documentation without the task_vars parameter.
+    signature that does not include the tvars parameter, so that
+    the caller sees documentation without the tvars parameter.
 
     :param task: the function being wrapped
         it has a 'c' parameter for the Invoke context
     """
     # create the function to expose to @task that does all the magic
-    # including calling the final function with an extra task_vars
+    # including calling the final function with an extra tvars
     # parameters that can handle attribute or dict lookups, and
     # those can be called as a function if key value pairs need
     # to be set for name value pairs
@@ -120,7 +120,7 @@ def task_vars(task):
                 #TODO: replace with value, and set __call__ for kwarg
                 return functools.partial(variable_lookup, c, i,
                                          module_name)
-        task(c, *args, task_vars=task_vars(), **kwargs)
+        task(c, *args, tvars=task_vars(), **kwargs)
     # gather the wrapped function's name and module so we can fake out
     # Invoke Task
     call_task.__name__  = task.__name__
@@ -128,28 +128,26 @@ def task_vars(task):
     # We also need to fake out the signature
     # inspect.signature creates a Signature object
     # Signature.parameters is a dict of name to Parameter objects
-    # filter out the 'task_vars' parameter that we injected and
+    # filter out the 'tvars' parameter that we injected and
     # create a new Signature for our wrapper, which @task will see
     # the __signature__ attribute tells inspect what to report the params are
     call_task.__signature__ = inspect.signature(task).replace(
         parameters=[p[1] for p in inspect.signature(task).parameters.items()
-                    if p[0] != 'task_vars'])
+                    if p[0] != 'tvars'])
     return call_task
 
 # brute force lookups, could build dependency graphs to speed lookups
 def variable_lookup(c, name, module_short_name, **kwargs):
     # we're going to rebuild the currently visible variables
     # for the module, so make a copy as "vars_dict"
-    vars_dict = dict(c.config[module_short_name])
+    vars_dict = {}
 
-    # if any kwarg overrides a value in a template dict, then
-    # that dict plus all the remaining have to be re-evaluated
-    # for this lookup, but all the ones before can be dropped
-    dicts_to_eval = list(
-        dropwhile(lambda d: not (set(d) & set(kwargs)),
-                  c.config.get('cptasks_module_defaults', [])))
+    # TODO: add kwargs overides but no rendering
+    vars_dict.update(kwargs)
 
-    for dict_to_eval in dicts_to_eval:
+    var_errs = {}
+
+    for dict_to_eval in c.config.get('cptasks_module_defaults', []):
         # for the current dict, some keys could be in kwargs too
         # grab those as "overrides".
         # We wait on any other kwargs until later as they may rely
@@ -161,18 +159,20 @@ def variable_lookup(c, name, module_short_name, **kwargs):
         # if the requested var was defined as a template in kwargs,
         # then just render it and we're done
         if name in overrides:
-            print("Requested var that we overrode: {}".format(name))
-            return format_strings(vars_dict, kwargs[name])
+            return _value_from_evaluated(vars_dict, var_errs, kwargs[name])
 
         # if the requested var was defined in the dict_to_eval,
         # then just render it and we're done
         if name in dict_to_eval:
-            print("Requested var that was pre-defined: {}".format(name))
-            return format_strings(vars_dict, dict_to_eval[name])
+            return _value_from_evaluated(vars_dict, var_errs, dict_to_eval[name])
 
-        # render the overrides
+        # render the items in the overrides set
         for k in overrides:
-            vars_dict[k] = format_strings(vars_dict, kwargs[k])
+            formatted, errs = _format_strings(vars_dict, var_errs, kwargs[k])
+            if errs:
+                var_errs[k] = errs
+            else:
+                vars_dict[k] = formatted
 
         # now we can render the rest of the current dict_to_eval
         # (vars not overridden) and add them to the final vars_dict
@@ -180,26 +180,97 @@ def variable_lookup(c, name, module_short_name, **kwargs):
         dict_to_eval = {k: v for k, v in dict_to_eval.items()
                         if k not in overrides}
         # and then render them
-        vars_dict.update(format_strings(vars_dict, dict_to_eval))
+        for k, v in dict_to_eval.items():
+            formatted, errs = _format_strings(vars_dict, var_errs, dict_to_eval[k])
+            if errs:
+                var_errs[k] = errs
+            else:
+                vars_dict[k] = formatted
 
     # we can only get here because we requested a variable that was never
     # defined in kwargs as an override nor in the defaults . . that's
     # a problem
     raise Exception("Failed to render " + name)
 
-def format_strings(var_dict, to_format):
-    # strings get rendered
+# this is a different traversal because we want failed variable knowledge
+# at the top level for reporting purposes
+
+def _value_from_evaluated(var_dict, var_errs, to_format):
     if isinstance(to_format, str):
-        return to_format.format(**var_dict)
-    # dicts have values rendered recursively
+        try:
+            return to_format.format(**var_dict)
+        except KeyError as e:
+            missing_key = e.args[0]
+        if missing_key in var_errs:
+            #TODO: replace failed var and rerun, collecting all problems
+            raise Exception("Missing variables: '{}': {}".format(
+                missing_key, var_errs[missing_key]))
+        raise Exception("Missing variable: {}".format(missing_key))
     if isinstance(to_format, dict):
-        return {k: format_strings(var_dict, v)
-                   for k, v in to_format.items()}
-    # lists have elements rendered recursively
+        errs = []
+        evaluated_vars = {}
+        for k, v in to_format.items():
+            try:
+                evaluated_vars[k] = _value_from_evaluated(
+                    var_dict, var_errs, v)
+            except Exception as e:
+                errs.append("{} -> {}".format(k, e.args[0]))
+        if errs:
+            raise Exception(errs)
+        return evaluated_vars
     if isinstance(to_format, list):
-        return [format_strings(var_dict, elem) for elem in to_format]
+        errs = []
+        evaluated = []
+        for item in to_format:
+            try:
+                evaluated.append[_value_from_evaluated(
+                    var_dict, var_errs, item)]
+            except Exception as e:
+                errs.append(e.args[0])
+        if errs:
+            raise Exception(errs)
+        return evaluated
     # and other objects like numbers are left as-is
     return to_format
+
+
+def _format_strings(var_dict, var_errs, to_format):
+    # strings get rendered
+    if isinstance(to_format, str):
+        try:
+            return (to_format.format(**var_dict), None)
+        except KeyError as e:
+            missing_key = e.args[0]
+            if not missing_key in var_errs:
+                return (to_format, "'{}' error, undefined key '{}': ".format(
+                    to_format, missing_key))
+            return (to_format,
+                    "'{}' error, undefined key '{}': {}".format(
+                        to_format, missing_key, var_errs[missing_key]))
+    # dicts have values rendered recursively
+    if isinstance(to_format, dict):
+        errs = []
+        formatted_dict = {}
+        for k, v in to_format.items():
+            formatted, err = _format_strings(var_dict, var_errs, v)
+            if err:
+                errs.append("{} -> {}".format(k, err))
+            else:
+                formatted_dict[k] = formatted
+        return (formatted_dict, errs)
+    # lists have elements rendered recursively
+    if isinstance(to_format, list):
+        errs = []
+        formatted_list = []
+        for item in to_format:
+            formatted, err = _format_strings(var_dict, var_errs, item)
+            if err:
+                errs.append(err)
+            else:
+                formatted_list.append(formatted)
+        return (formatted_list, errs)
+    # and other objects like numbers are left as-is
+    return (to_format, None)
 
 def load_defaults(collection=None):
     """Update collection configuration with defaults from a .yml file
@@ -234,8 +305,7 @@ def load_defaults(collection=None):
             module_vars = {}
             cptasks_module_defaults = list(yaml.safe_load_all(f))
             for var_dict in cptasks_module_defaults:
-                formatted_vars = format_strings(module_vars, var_dict)
-                module_vars.update(formatted_vars)
+                module_vars.update(var_dict)
             module_short_name = calling_module.__name__.split('.')[-1]
             collection.configure({
                 module_short_name: module_vars,

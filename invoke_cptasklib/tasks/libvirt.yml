@@ -1,6 +1,4 @@
 ---
-instance_name: UNKNOWN
-disk_name: UNKNOWN
 
 vcpus: 1
 ram_mb: 2048
@@ -27,7 +25,7 @@ images_dir: "{assets_base_dir}/images"
 distro_download_filename: "{distro_name}.squashfs"
 distro_disk_filename: "{distro_name}.qcow2"
 
-kernel_args: ""
+kernel_args: "root=/dev/vda"
 kernel_name: "{distro_name}-vmlinuz-generic"
 initrd_name: "{distro_name}-initrd-generic"
 
@@ -49,7 +47,6 @@ distro_raw_image_path: "{distro_disk_dir}/{distro_name}.img"
 
 kernel_path: "{assets_base_dir}/boot/{kernel_name}"
 initrd_path: "{assets_base_dir}/boot/{initrd_name}"
-kernel_args: "root=/dev/vda"
 #cpu_model: Skylake-Client
 
 ---

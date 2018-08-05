@@ -44,18 +44,23 @@ def cat(c):
 
 @task
 @task_vars
-def meh(c, task_vars, name='one'):
-    print("Got {}".format(task_vars.vm(instance_name=name)))
-    print("Got {}".format(task_vars.vm(vm="{root_disk_arg}")))
+def meh(c, tvars, name='one'):
+    print("Got {}".format(tvars.vm(instance_name=name)))
+    print("Got {}".format(tvars.vm(vm="hi")))
+    print("Got {}".format(tvars.vm(vm="{images_dir}")))
+    print("Got {}".format(tvars.vm(instance_name=name, vm="{root_disk_arg}")))
+    print("Got {}".format(tvars.vm_virt_install_cmd(instance_name=name)))
+    print("Got {}".format(tvars.vm(vm="{root_disk_arg}")))
 
 @task
-def ensure_cloud_init_image(c, instance_name):
-    image_path = v(c, 'cloud_init_floppy_path', instance_name=instance_name)
+@task_vars
+def ensure_cloud_init_image(c, tvars, instance_name):
+    image_path = tvars.cloud_init_floppy_path(instance_name=instance_name)
     c.run('sudo truncate --size 2M {}'.format(image_path))
     c.run('sudo mkfs.vfat -n cidata {}'.format(image_path))
-    with c.cd(v(c, 'instance_disk_dir', instance_name=instance_name)):
-        user_data = v(c, 'user_data', instance_name=instance_name)
-        meta_data = v(c, 'meta_data', instance_name=instance_name)
+    with c.cd(tvars.instance_disk_dir(instance_name=instance_name)):
+        user_data = tvars.user_data(instance_name=instance_name)
+        meta_data = tvars.meta_data(instance_name=instance_name)
         print("Creating user data")
         c.run('sudo tee user-data > /dev/null', in_stream=StringIO(user_data))
         print("Creating meta data")
@@ -138,7 +143,7 @@ def create_vm(c, name, single_user=False):
 
     ensure_distro_base_image(c)
 
-    root_disk = v(c, 'root_disk', **overrides)
+    root_disk = tvars.root_disk(**overrides)
     ensure_disk_image(c, root_disk, base=c.libvirt.distro_disk_path)
 
     ensure_cloud_init_image(c, instance_name=name)
@@ -147,7 +152,7 @@ def create_vm(c, name, single_user=False):
         overrides['kernel_args'] += ' ' + c.libvirt.kernel_single_user_args
         overrides['graphics_arg'] = c.libvirt.no_graphics_arg
 
-    cmd = v(c, 'vm_virt_install_cmd', **overrides)
+    cmd = tvars.vm_virt_install_cmd(**overrides)
 
     print("Creating VM")
     c.run(cmd, pty=single_user, fallback=False)
