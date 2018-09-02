@@ -1,0 +1,39 @@
+libvirt:
+    ram_mb: 1024
+
+    root_disk_size_g: 150
+
+    spf13_installer: https://raw.githubusercontent.com/spf13/spf13-vim/bb5b09f81e0d3a6ce65360ff773fcfcdc73ec243/bootstrap.sh
+
+    user_data: |
+        #cloud-config
+        password: passw0rd
+        chpasswd:
+            expire: False
+        ssh_pwauth: True
+        manage_etc_hosts: True
+
+        run_cmd:
+            - set -euo pipefail
+            - apt-get update
+            # apt-transport-https no longer needed in bionic+
+            # software-properties-common adds /usr/bin/add-apt-repository
+            - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+            - apt-get install -y curl ca-certificates software-properties-common
+              jq unzip vim git wget bwm-ng
+            - add-apt-repository "deb https://download.docker.com/linux/ubuntu xenial stable"
+            - apt-get update
+            - "docker_version=\$(apt-cache madison docker-ce | grep 17.03 | head -1 | awk '{print \$3}')"
+            - apt-get install -y docker-ce=\$docker_version
+            - echo Completed installation, shutting down
+
+        write_files:
+            - owner: root:root
+              path: /etc/apt/apt.conf.d/02proxy
+              # apt-cacher-ng is running on the host
+              permissions: 0644
+              content: 'Acquire::http::proxy "http://192.168.1.3:3142";'
+
+    meta_data: |
+        instance-id: {instance_name}-01
+        local-hostname: {instance_name}
