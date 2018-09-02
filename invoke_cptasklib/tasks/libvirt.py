@@ -68,11 +68,12 @@ def ensure_cloud_init_image(c, tvars, instance_name):
         c.run('sudo mcopy -oi {} user-data meta-data ::'.format(image_path))
 
 @task
-def ensure_distro_base_image(c):
-    if path.exists(c.libvirt.distro_disk_path):
+@task_vars
+def ensure_distro_base_image(c, tvars):
+    if path.exists(tvars.distro_disk_path()):
         return
 
-    src = c.libvirt.distro_download_path
+    src = tvars.distro_download_path()
 
     # make sure we can process the download file (squashfs)
     file_results = c.run("file %s" % src, hide="stdout")
@@ -81,12 +82,12 @@ def ensure_distro_base_image(c):
             file_results.stdout))
 
     # create and format the image where the distro will be copied to
-    distro_image = c.libvirt.distro_raw_image_path
+    distro_image = tvars.distro_raw_image_path()
     ensure_disk_image(c, distro_image)
     c.run("sudo mkfs.ext4 -L cloudimg-rootfs -F {}".format(distro_image))
     #c.run("sudo mkfs.ext3 -L cloudimg-rootfs -F {}".format(raw_file))
 
-    distro_mount = c.libvirt.distro_mount_dir
+    distro_mount = tvars.distro_mount_dir()
     file_util.ensure_mount(c, distro_image, distro_mount)
 
     unpack_subdir = path.join(distro_mount, 'squashfs_unpack_dir')
@@ -103,7 +104,7 @@ def ensure_distro_base_image(c):
 
     # convert the raw image into qcow so it can be used as a base image
     c.run('sudo qemu-img convert -f raw -O qcow2 {} {}'.format(
-        distro_image, c.libvirt.distro_disk_path))
+        distro_image, tvars.distro_disk_pathi()))
     c.run('sudo rm {}'.format(distro_image))
 
 
@@ -137,20 +138,20 @@ def deprecated_ensure_vm_fs(c, name, fs_dir=None):
 
 
 @task
-def create_vm(c, name, single_user=False):
-    #kernel_args = 'root=/dev/vda'
+@task_vars
+def create_vm(c, tvars, name, single_user=False):
     overrides = dict(instance_name=name)
 
     ensure_distro_base_image(c)
 
     root_disk = tvars.root_disk(**overrides)
-    ensure_disk_image(c, root_disk, base=c.libvirt.distro_disk_path)
+    ensure_disk_image(c, root_disk, base=tvars.distro_disk_path())
 
     ensure_cloud_init_image(c, instance_name=name)
 
     if single_user:
-        overrides['kernel_args'] += ' ' + c.libvirt.kernel_single_user_args
-        overrides['graphics_arg'] = c.libvirt.no_graphics_arg
+        overrides['kernel_args'] += ' ' + tvars.kernel_single_user_args()
+        overrides['graphics_arg'] = tvars.no_graphics_arg()
 
     cmd = tvars.vm_virt_install_cmd(**overrides)
 
@@ -159,6 +160,5 @@ def create_vm(c, name, single_user=False):
 
 
 ns = util.load_defaults()
-v = functools.partial(util.variable_lookup, module_short_name='libvirt')
 util.add_tasks(ns, packages)
 util.add_tasks(ns, file_util)

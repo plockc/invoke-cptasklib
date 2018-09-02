@@ -78,7 +78,8 @@ vm:
 vm_virt_install_cmd: >-
     virt-install --debug --name={vm[name]} --ram={vm[ram_mb]}
     --vcpus={vm[vcpus]} --cpu={vm[cpu_model]} --os-variant ubuntu17.10
-    {vm[root_disk]} {vm[cloud_init_disk]} {vm[other_disks]} --network=user --import
+    {vm[root_disk]} {vm[cloud_init_disk]} {vm[other_disks]}
+    --network=network=default --import
     --boot kernel={vm[kernel_path]},initrd={vm[initd_path]},kernel_args="{vm[kernel_args]}"
     {vm[graphics]}
 
