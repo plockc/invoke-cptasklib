@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "4d5e94e27ae7d48260d75323a991032213cfe6680160a37c99429e30ee7c28a1"
+            "sha256": "116c76bcdb7d8eadecd3305201a5cfa9c285a0533e4eede99110cad87aab24fa"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -18,10 +18,10 @@
     "default": {
         "certifi": {
             "hashes": [
-                "sha256:13e698f54293db9f89122b0581843a782ad0934a4fe0172d2a980ba77fc61bb7",
-                "sha256:9fa520c1bacfb634fa7af20a76bcbd3d5fb390481724c597da32c719a7dca4b0"
+                "sha256:376690d6f16d32f9d1fe8932551d80b23e9d393a8578c5633a2ed39a64861638",
+                "sha256:456048c7e371c089d0a77a5212fb37a2c2dce1e24146e3b7e0261736aaeaa22a"
             ],
-            "version": "==2018.4.16"
+            "version": "==2018.8.24"
         },
         "chardet": {
             "hashes": [
@@ -42,8 +42,13 @@
             "version": "==2.7"
         },
         "invoke": {
-            "git": "https://github.com/plockc/invoke.git",
-            "ref": "7a3c926fa8d3e166b44f8d8fc72f661071b7d656"
+            "hashes": [
+                "sha256:1db6cf918e5df10efe4d61101b19763abe1510b6b2fe8c553daba25476de8044",
+                "sha256:265eead8c89805a2ac5083200842db6da7636ac63fb4fe0d1121b930770f3e2a",
+                "sha256:3e8e2c2e69493227e210a1d19ccc7c44189240385dda4c9b8eb5d98fa0f68a3e"
+            ],
+            "index": "pypi",
+            "version": "==1.1.0"
         },
         "pyyaml": {
             "hashes": [

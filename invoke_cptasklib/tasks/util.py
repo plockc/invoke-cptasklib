@@ -142,7 +142,7 @@ def variable_lookup(c, name, module_short_name, **kwargs):
     # for the module, so make a copy as "vars_dict"
     vars_dict = {}
 
-    # TODO: add kwargs overides but no rendering
+    # TODO: add kwargs overrides but no rendering
     vars_dict.update(kwargs)
 
     var_errs = {}
@@ -156,7 +156,8 @@ def variable_lookup(c, name, module_short_name, **kwargs):
         # render all overrides and add them to the final vars_dict
         overrides = set(kwargs) & set(dict_to_eval)
 
-        # if the requested var was defined as a template in kwargs,
+        # if the requested var was defined at this level (dict_to_eval)
+        # and it was defined as a template in kwargs,
         # then just render it and we're done
         if name in overrides:
             return _value_from_evaluated(vars_dict, var_errs, kwargs[name])
@@ -176,7 +177,7 @@ def variable_lookup(c, name, module_short_name, **kwargs):
 
         # now we can render the rest of the current dict_to_eval
         # (vars not overridden) and add them to the final vars_dict
-        # first, filter out the ones we don't want
+        # first, filter out the ones we already processed
         dict_to_eval = {k: v for k, v in dict_to_eval.items()
                         if k not in overrides}
         # and then render them
@@ -299,7 +300,7 @@ def load_defaults(collection=None):
     default_path = caller_path[:-3] + ".yml"
     if os.path.isfile(default_path):
         with open(default_path) as f:
-            print("loaded defaults from {}".format(default_path))
+            print("loading defaults from {}".format(default_path))
             # TODO: load up all them dicts
             # here it is rendering all the values with the current settings
             module_vars = {}
@@ -312,10 +313,15 @@ def load_defaults(collection=None):
                 'cptasks_module_defaults': cptasks_module_defaults})
     return collection
 
-
 # TODO: split up the load defaults above so can load the passed in module's
 #  defaults before overriding
-def add_tasks(ns, module, *tasks):
+# TODO: I think we have to update cptasks_module_defaults for children, kind of like how we render
+#  but insert the overrides at the proper dict in the list of cptasks_module_defaults
+# TODO: at some point deal with granchild overrides
+def add_tasks(ns, module, *tasks, **named_tasks):
+    """
+    :param ns: namespace to add tasks to, expected that it is fully configured
+    """
     calling_module = inspect.getmodule(inspect.stack()[1][0])
     calling_module_short_name = calling_module.__name__.split('.')[-1]
 

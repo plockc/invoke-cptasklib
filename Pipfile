@@ -6,7 +6,7 @@ name = "pypi"
 [dev-packages]
 
 [packages]
-invoke = { git = 'https://github.com/plockc/invoke.git', ref='bugfix_stdin'}
+invoke = "==1.1.0"
 pyyaml = "*"
 setuptools = "*"
 "e1839a8" = {path = ".", editable = true}

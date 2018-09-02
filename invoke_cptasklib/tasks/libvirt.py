@@ -1,4 +1,3 @@
-import functools
 from os import path
 from io import StringIO
 
@@ -140,15 +139,14 @@ def deprecated_ensure_vm_fs(c, name, fs_dir=None):
 @task
 @task_vars
 def create_vm(c, tvars, name, single_user=False):
-    overrides = dict(instance_name=name)
-
     ensure_distro_base_image(c)
 
-    root_disk = tvars.root_disk(**overrides)
+    root_disk = tvars.root_disk(instance_name=name)
     ensure_disk_image(c, root_disk, base=tvars.distro_disk_path())
 
     ensure_cloud_init_image(c, instance_name=name)
 
+    overrides = {}
     if single_user:
         overrides['kernel_args'] += ' ' + tvars.kernel_single_user_args()
         overrides['graphics_arg'] = tvars.no_graphics_arg()

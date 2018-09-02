@@ -91,5 +91,5 @@ user_data: |
     ssh_pwauth: True
 
 meta_data: |
-    instance-id: iid-local01
+    instance-id: {instance_name}-01
     local-hostname: {instance_name}
