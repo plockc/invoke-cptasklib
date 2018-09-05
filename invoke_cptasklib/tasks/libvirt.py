@@ -24,6 +24,7 @@ def ensure_disk_image(c, img_path, size_g=50, base=None):
             file_name))
     file_ext = file_ext[1:]
     if base is not None:
+        print("Using base {}".format(base))
         if file_ext not in ['qcow2']:
             raise Exception("Must have qcow2 if specifying a backing image")
     preallocation_arg = (
@@ -55,21 +56,29 @@ def meh(c, tvars, name='one'):
 @task_vars
 def ensure_cloud_init_image(c, tvars, instance_name):
     image_path = tvars.cloud_init_floppy_path(instance_name=instance_name)
+    print("Allocating cloud image disk storage")
     c.run('sudo truncate --size 2M {}'.format(image_path))
+    print("Formatting cloud image disk")
     c.run('sudo mkfs.vfat -n cidata {}'.format(image_path))
     with c.cd(tvars.instance_disk_dir(instance_name=instance_name)):
+        print("Rendering user data")
         user_data = tvars.user_data(instance_name=instance_name)
+        print("Rendering meta data")
         meta_data = tvars.meta_data(instance_name=instance_name)
-        print("Creating user data")
+        print("Writing user data")
         c.run('sudo tee user-data > /dev/null', in_stream=StringIO(user_data))
-        print("Creating meta data")
+        print("Writing meta data")
         c.run('sudo tee meta-data > /dev/null', in_stream=StringIO(meta_data))
+        print("Writing cloud image")
         c.run('sudo mcopy -oi {} user-data meta-data ::'.format(image_path))
+        print("Created cloud image")
+
 
 @task
 @task_vars
 def ensure_distro_base_image(c, tvars):
     if path.exists(tvars.distro_disk_path()):
+        print("Distro base image already exists, not creating")
         return
 
     src = tvars.distro_download_path()
@@ -103,7 +112,7 @@ def ensure_distro_base_image(c, tvars):
 
     # convert the raw image into qcow so it can be used as a base image
     c.run('sudo qemu-img convert -f raw -O qcow2 {} {}'.format(
-        distro_image, tvars.distro_disk_pathi()))
+        distro_image, tvars.distro_disk_path()))
     c.run('sudo rm {}'.format(distro_image))
 
 
@@ -138,7 +147,8 @@ def deprecated_ensure_vm_fs(c, name, fs_dir=None):
 
 @task
 @task_vars
-def create_vm(c, tvars, name, single_user=False):
+def create_vm(c, tvars, name=None, single_user=False):
+    name = name or tvars.instance_name()
     ensure_distro_base_image(c)
 
     root_disk = tvars.root_disk(instance_name=name)
@@ -146,9 +156,9 @@ def create_vm(c, tvars, name, single_user=False):
 
     ensure_cloud_init_image(c, instance_name=name)
 
-    overrides = {}
+    overrides = dict(instance_name=name)
     if single_user:
-        overrides['kernel_args'] += ' ' + tvars.kernel_single_user_args()
+        overrides['kernel_args'] = tvars.kernel_args() + ' ' + tvars.kernel_single_user_args()
         overrides['graphics_arg'] = tvars.no_graphics_arg()
 
     cmd = tvars.vm_virt_install_cmd(**overrides)

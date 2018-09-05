@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "116c76bcdb7d8eadecd3305201a5cfa9c285a0533e4eede99110cad87aab24fa"
+            "sha256": "288a88dc2f99f301d77978b8d0398868232f7e2a2488943623ed818975957c43"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -42,13 +42,8 @@
             "version": "==2.7"
         },
         "invoke": {
-            "hashes": [
-                "sha256:1db6cf918e5df10efe4d61101b19763abe1510b6b2fe8c553daba25476de8044",
-                "sha256:265eead8c89805a2ac5083200842db6da7636ac63fb4fe0d1121b930770f3e2a",
-                "sha256:3e8e2c2e69493227e210a1d19ccc7c44189240385dda4c9b8eb5d98fa0f68a3e"
-            ],
-            "index": "pypi",
-            "version": "==1.1.0"
+            "git": "https://github.com/plockc/invoke.git",
+            "ref": "e8cfe52044a8f314ac476538167e03df95959aa2"
         },
         "pyyaml": {
             "hashes": [

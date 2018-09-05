@@ -6,7 +6,8 @@ name = "pypi"
 [dev-packages]
 
 [packages]
-invoke = "==1.1.0"
+#invoke = "==1.1.1"
+invoke = { git = 'https://github.com/plockc/invoke.git', ref='e8cfe52044a8f314ac476538167e03df95959aa2'}
 pyyaml = "*"
 setuptools = "*"
 "e1839a8" = {path = ".", editable = true}

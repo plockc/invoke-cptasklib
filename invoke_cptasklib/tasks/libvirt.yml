@@ -7,6 +7,7 @@ root_disk_size_g: 50
 
 distro_name: bionic-server-cloudimg-amd64
 kernel_single_user_args: "single console=ttyS0,115200"
+graphics_arg: ""
 no_graphics_arg: "--graphics none"
 
 cloud_init_file_name: cloud-init.img
@@ -32,8 +33,8 @@ initrd_name: "{distro_name}-initrd-generic"
 ---
 instance_disk_dir: "{images_dir}/{instance_name}"
 
-distro_downloads_dir: "{images_dir}/distro_downloads"
-distro_disk_dir: "{images_dir}/distro_bases"
+distro_downloads_dir: "{assets_base_dir}/distro_downloads"
+distro_disk_dir: "{assets_base_dir}/distro_bases"
 
 ---
 root_disk: "{instance_disk_dir}/disk-root.qcow2"
@@ -43,7 +44,7 @@ cloud_init_floppy_path: "{instance_disk_dir}/{cloud_init_file_name}"
 distro_disk_path: "{distro_disk_dir}/{distro_disk_filename}"
 distro_download_path: "{distro_downloads_dir}/{distro_download_filename}"
 distro_mount_dir: "{distro_disk_dir}/{distro_name}_root_mnt"
-distro_raw_image_path: "{distro_disk_dir}/{distro_name}.img"
+distro_raw_image_path: "{distro_disk_dir}/{distro_name}.raw"
 
 kernel_path: "{assets_base_dir}/boot/{kernel_name}"
 initrd_path: "{assets_base_dir}/boot/{initrd_name}"
@@ -67,7 +68,7 @@ vm:
     root_disk: "{root_disk_arg}"
     cloud_init_disk: "{cloud_init_disk_arg}"
     other_disks: "{other_disks}"
-    graphics: ""
+    graphics: "{graphics_arg}"
 ---
 
 #fs_vm_virt_install_tmpl: >-

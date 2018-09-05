@@ -7,6 +7,7 @@ import time
 import yaml
 
 from invoke import Collection
+from invoke.config import DataProxy
 from invoke.tasks import Task
 
 def get_present_and_missing(now, desired, delimiters=", ;"):
@@ -111,14 +112,14 @@ def task_vars(task):
             parameter "task_args"
             """
             # handle dict lookups
-            def __getitem__(self, i):
+            def __getitem__(self, key):
                 #TODO: replace with value, and set __call__ for kwarg
-                return functools.partial(variable_lookup, c, i,
+                return functools.partial(variable_lookup, c, key,
                                          module_name)
             # handle attribute lookups
-            def __getattribute__(self, i):
+            def __getattribute__(self, key):
                 #TODO: replace with value, and set __call__ for kwarg
-                return functools.partial(variable_lookup, c, i,
+                return functools.partial(variable_lookup, c, key,
                                          module_name)
         task(c, *args, tvars=task_vars(), **kwargs)
     # gather the wrapped function's name and module so we can fake out
@@ -137,61 +138,21 @@ def task_vars(task):
     return call_task
 
 # brute force lookups, could build dependency graphs to speed lookups
-def variable_lookup(c, name, module_short_name, **kwargs):
+def variable_lookup(c, name, module_name, **kwargs):
     # we're going to rebuild the currently visible variables
     # for the module, so make a copy as "vars_dict"
-    vars_dict = {}
+    vars_dict = dict(c.config[module_name])
 
+    #print("default loaded for module: {}".format(c.config['cptasks_module_defaults']))
+    var_errs = {}
     # TODO: add kwargs overrides but no rendering
     vars_dict.update(kwargs)
 
-    var_errs = {}
-
-    for dict_to_eval in c.config.get('cptasks_module_defaults', []):
-        # for the current dict, some keys could be in kwargs too
-        # grab those as "overrides".
-        # We wait on any other kwargs until later as they may rely
-        # on other vars that are in dicts that appear later
-
-        # render all overrides and add them to the final vars_dict
-        overrides = set(kwargs) & set(dict_to_eval)
-
-        # if the requested var was defined at this level (dict_to_eval)
-        # and it was defined as a template in kwargs,
-        # then just render it and we're done
-        if name in overrides:
-            return _value_from_evaluated(vars_dict, var_errs, kwargs[name])
-
-        # if the requested var was defined in the dict_to_eval,
-        # then just render it and we're done
-        if name in dict_to_eval:
-            return _value_from_evaluated(vars_dict, var_errs, dict_to_eval[name])
-
-        # render the items in the overrides set
-        for k in overrides:
-            formatted, errs = _format_strings(vars_dict, var_errs, kwargs[k])
-            if errs:
-                var_errs[k] = errs
-            else:
-                vars_dict[k] = formatted
-
-        # now we can render the rest of the current dict_to_eval
-        # (vars not overridden) and add them to the final vars_dict
-        # first, filter out the ones we already processed
-        dict_to_eval = {k: v for k, v in dict_to_eval.items()
-                        if k not in overrides}
-        # and then render them
-        for k, v in dict_to_eval.items():
-            formatted, errs = _format_strings(vars_dict, var_errs, dict_to_eval[k])
-            if errs:
-                var_errs[k] = errs
-            else:
-                vars_dict[k] = formatted
-
-    # we can only get here because we requested a variable that was never
-    # defined in kwargs as an override nor in the defaults . . that's
-    # a problem
-    raise Exception("Failed to render " + name)
+    rendered_vars = {}
+    rendered, errs = _format_strings(vars_dict, rendered_vars, var_errs, vars_dict[name])
+    if errs:
+        raise Exception("Failed to render {}: {}".format(name, errs))
+    return rendered
 
 # this is a different traversal because we want failed variable knowledge
 # at the top level for reporting purposes
@@ -235,25 +196,39 @@ def _value_from_evaluated(var_dict, var_errs, to_format):
     return to_format
 
 
-def _format_strings(var_dict, var_errs, to_format):
+def _format_strings(var_dict, rendered_vars, var_errs, to_format):
     # strings get rendered
     if isinstance(to_format, str):
         try:
-            return (to_format.format(**var_dict), None)
+            return (to_format.format(**rendered_vars), None)
         except KeyError as e:
             missing_key = e.args[0]
-            if not missing_key in var_errs:
-                return (to_format, "'{}' error, undefined key '{}': ".format(
-                    to_format, missing_key))
-            return (to_format,
+            if missing_key in var_errs:
+                return (to_format,
                     "'{}' error, undefined key '{}': {}".format(
                         to_format, missing_key, var_errs[missing_key]))
+            # no known error for it, verify dependency is defined
+            if not missing_key in var_dict:
+                return (to_format, "'{}' error, undefined key '{}': ".format(
+                    to_format, missing_key))
+            # so, we depend on 'missing_key' and so far there is not an error
+            # for it yet, so let's try to recursively render it
+            child_var, child_var_errs = _format_strings(
+                var_dict, rendered_vars, var_errs, var_dict[missing_key])
+            if child_var_errs:
+                return (to_format,
+                    "'{}' error, failure to render dependency '{}': {}".format(
+                        to_format, missing_key, child_var_errs))
+            # capture the successful dependency rendering
+            rendered_vars[missing_key] = child_var
+            # rerun the current request (but rendered_vars has an update)
+            return _format_strings(var_dict, rendered_vars, var_errs, to_format)
     # dicts have values rendered recursively
-    if isinstance(to_format, dict):
+    if isinstance(to_format, dict) or isinstance(to_format, DataProxy):
         errs = []
         formatted_dict = {}
         for k, v in to_format.items():
-            formatted, err = _format_strings(var_dict, var_errs, v)
+            formatted, err = _format_strings(var_dict, rendered_vars, var_errs, v)
             if err:
                 errs.append("{} -> {}".format(k, err))
             else:
@@ -264,7 +239,7 @@ def _format_strings(var_dict, var_errs, to_format):
         errs = []
         formatted_list = []
         for item in to_format:
-            formatted, err = _format_strings(var_dict, var_errs, item)
+            formatted, err = _format_strings(var_dict, rendered_vars, var_errs, item)
             if err:
                 errs.append(err)
             else:
@@ -318,8 +293,10 @@ def load_defaults(collection=None):
 # TODO: I think we have to update cptasks_module_defaults for children, kind of like how we render
 #  but insert the overrides at the proper dict in the list of cptasks_module_defaults
 # TODO: at some point deal with granchild overrides
-def add_tasks(ns, module, *tasks, **named_tasks):
+def add_tasks(ns, module, *task_names, **aliased_task_names):
     """
+    :param named_tasks: dict of names to tasks
+    :param tasks: task objects to add
     :param ns: namespace to add tasks to, expected that it is fully configured
     """
     calling_module = inspect.getmodule(inspect.stack()[1][0])
@@ -329,24 +306,34 @@ def add_tasks(ns, module, *tasks, **named_tasks):
 
     # create new collection and add the requested task
     # this allows us to create a configuration specific to this collection
-    if tasks:
-        for task in tasks:
-            collection = Collection(module_name)
-            task = getattr(module, task)
-            collection.add_task(task)
-    else:
-        collection = Collection.from_module(module)
+    collection = Collection.from_module(module)
+    collection_config = collection.configuration()
+    if task_names or aliased_task_names:
+        collection = Collection()
+        collection.configure(collection_config)
+        if task_names:
+            for task_name in tasks:
+                task = getattr(module, task_name)
+                collection.add_task(task)
+        if aliased_task_names:
+            for task_alias, task_name in aliased_task_names.items():
+                task = getattr(module, task_name)
+                collection.add_task(task, name=task_alias)
 
-    ns.add_collection(collection)
+    ns.add_collection(collection, name=module_name)
 
     if not calling_module_short_name in ns.configuration():
+        # either load_defaults was not called or had no config
         return
+    # we have on disk configuration from the calling module
     calling_module_configuration = ns.configuration()[calling_module_short_name]
     if not module_name in calling_module_configuration:
+        # the on disk config for the calling module has no overrides for
+        # the dependency module
         return
-    module_configuration = calling_module_configuration[module_name]
-    collection.configure({module_name: module_configuration})
-
+    # will merge the overrides with the dependency's config
+    override_configuration = calling_module_configuration[module_name]
+    collection.configure({module_name: override_configuration})
 
 def wait_for_true(func, max_seconds=30, recheck_delay=10,
                   raise_ex=True, *args, **kwargs):

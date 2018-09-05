@@ -1,5 +1,5 @@
 libvirt:
-    ram_mb: 1024
+    instance_name: base
 
     root_disk_size_g: 150
 
@@ -13,18 +13,33 @@ libvirt:
         ssh_pwauth: True
         manage_etc_hosts: True
 
-        run_cmd:
-            - set -euo pipefail
+        power_state:
+            mode: poweroff
+            timeout: 15
+
+        users:
+            - default
+
+        runcmd:
+            - set -eu
+            # this load a module that is in the linux-image-extra package, which is not
+            # something we install in the cloud image
+            - apt remove -y open-iscsi
             - apt-get update
+            # seems that cloud image is missing a ton of modules
+            - "apt install --reinstall linux-modules-$(uname -r)"
+            - apt upgrade -y
             # apt-transport-https no longer needed in bionic+
             # software-properties-common adds /usr/bin/add-apt-repository
             - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
-            - apt-get install -y curl ca-certificates software-properties-common
-              jq unzip vim git wget bwm-ng
-            - add-apt-repository "deb https://download.docker.com/linux/ubuntu xenial stable"
+            # not installing linux-image-extra-virtual 
+            # not installing linux-image-$(uname -r)
+            - "apt-get install -y curl ca-certificates software-properties-common
+              jq unzip vim git wget bwm-ng"
+            - add-apt-repository "deb http://192.168.1.3:3142/HTTPS///download.docker.com/linux/ubuntu xenial stable"
             - apt-get update
-            - "docker_version=\$(apt-cache madison docker-ce | grep 17.03 | head -1 | awk '{print \$3}')"
-            - apt-get install -y docker-ce=\$docker_version
+            - "docker_version=$(apt-cache madison docker-ce | grep 17.03 | head -1 | awk '{{print $3}}')"
+            - apt-get install -y docker-ce=$docker_version
             - echo Completed installation, shutting down
 
         write_files:
@@ -32,8 +47,14 @@ libvirt:
               path: /etc/apt/apt.conf.d/02proxy
               # apt-cacher-ng is running on the host
               permissions: 0644
-              content: 'Acquire::http::proxy "http://192.168.1.3:3142";'
+              content: |
+                  Acquire::http::Proxy::security.ubuntu.com "http://192.168.1.3:3142";
+                  Acquire::http::Proxy::archive.ubuntu.com "http://192.168.1.3:3142";
 
     meta_data: |
         instance-id: {instance_name}-01
         local-hostname: {instance_name}
+        password: passw0rd
+        chpasswd:
+            expire: False
+        ssh_pwauth: True
